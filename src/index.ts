@@ -1,7 +1,6 @@
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createHash } from 'crypto';
 import { validateApiKey, AuthContext } from './auth.js';
 import { oauthRouter } from './oauth.js';
 import { registerEntityTools } from './tools/entities.js';
@@ -27,25 +26,33 @@ app.get('/health', (_req, res) => {
 // OAuth routes
 app.use(oauthRouter);
 
-// MCP endpoint — aceita Bearer token (API Key hash do OAuth ou API Key direta)
+// MCP endpoint
 app.post('/mcp', async (req, res) => {
   let auth: AuthContext;
 
   const authHeader = req.headers.authorization;
 
+  console.log('=== MCP REQUEST ===');
+  console.log('Auth header presente:', !!authHeader);
+  console.log('Auth header valor:', authHeader ? authHeader.substring(0, 40) + '...' : 'AUSENTE');
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('ERRO: Authorization header ausente ou inválido');
     res.status(401).json({ error: 'Authorization header ausente' });
     return;
   }
 
   const token = authHeader.replace('Bearer ', '').trim();
+  console.log('Token length:', token.length);
+  console.log('Token primeiros 30 chars:', token.substring(0, 30));
+  console.log('Começa com fincore_:', token.startsWith('fincore_'));
 
   try {
-    // Tenta autenticar via API Key direta (fincore_...)
     if (token.startsWith('fincore_')) {
+      console.log('Autenticando via API Key direta');
       auth = await validateApiKey(authHeader);
     } else {
-      // Token é um hash de API Key (vindo do OAuth)
+      console.log('Autenticando via hash OAuth');
       const { data, error } = await supabase
         .from('user_api_keys')
         .select('id, user_id, entity_ids, revoked_at')
@@ -53,12 +60,14 @@ app.post('/mcp', async (req, res) => {
         .is('revoked_at', null)
         .single();
 
+      console.log('Resultado busca hash:', { found: !!data, error: error?.message });
+
       if (error || !data) {
+        console.log('ERRO: Token inválido ou revogado');
         res.status(401).json({ error: 'Token inválido ou revogado' });
         return;
       }
 
-      // Atualiza last_used_at em background
       supabase
         .from('user_api_keys')
         .update({ last_used_at: new Date().toISOString() })
@@ -69,8 +78,10 @@ app.post('/mcp', async (req, res) => {
         user_id: data.user_id,
         entity_ids: data.entity_ids ?? null,
       };
+      console.log('Auth OK — user_id:', data.user_id);
     }
   } catch (err: any) {
+    console.log('ERRO autenticação:', err.message);
     res.status(401).json({ error: err.message ?? 'Unauthorized' });
     return;
   }
@@ -100,9 +111,12 @@ app.post('/mcp', async (req, res) => {
   });
 
   try {
+    console.log('Conectando MCP server...');
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
+    console.log('MCP request processado com sucesso');
   } catch (err: any) {
+    console.log('ERRO MCP:', err.message);
     if (!res.headersSent) {
       res.status(500).json({ error: err.message ?? 'Internal server error' });
     }
