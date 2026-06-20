@@ -6,9 +6,21 @@ export const oauthRouter = Router();
 
 const APP_URL = 'https://mcp.fincore.app.br';
 
+// OAuth discovery — obrigatório para o claude.ai encontrar os endpoints
+oauthRouter.get('/.well-known/oauth-authorization-server', (_req, res) => {
+  res.json({
+    issuer: APP_URL,
+    authorization_endpoint: `${APP_URL}/oauth/authorize`,
+    token_endpoint: `${APP_URL}/oauth/token`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256'],
+  });
+});
+
 // Página de autorização — usuário cola a API Key aqui
 oauthRouter.get('/oauth/authorize', (req, res) => {
-  const { client_id, redirect_uri, state, response_type } = req.query;
+  const { redirect_uri, state } = req.query;
 
   const html = `
 <!DOCTYPE html>
@@ -37,28 +49,10 @@ oauthRouter.get('/oauth/authorize', (req, res) => {
       max-width: 480px;
       width: 100%;
     }
-    .logo {
-      font-size: 32px;
-      margin-bottom: 8px;
-    }
-    h1 {
-      font-size: 22px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    p {
-      color: #999;
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 24px;
-    }
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 8px;
-      color: #ccc;
-    }
+    .logo { font-size: 32px; margin-bottom: 8px; }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+    p { color: #999; font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: #ccc; }
     input {
       width: 100%;
       padding: 12px 16px;
@@ -84,12 +78,7 @@ oauthRouter.get('/oauth/authorize', (req, res) => {
       cursor: pointer;
     }
     button:hover { background: #ea6c0a; }
-    .hint {
-      margin-top: 16px;
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-    }
+    .hint { margin-top: 16px; font-size: 12px; color: #666; text-align: center; }
     .hint a { color: #f97316; text-decoration: none; }
     .error {
       background: #3a1a1a;
@@ -166,7 +155,6 @@ oauthRouter.get('/oauth/authorize', (req, res) => {
           return;
         }
 
-        // Redireciona com o código de autorização
         window.location.href = data.redirect_url;
       } catch {
         errorEl.textContent = 'Erro de conexão. Tente novamente.';
@@ -192,7 +180,6 @@ oauthRouter.post('/oauth/validate', async (req, res) => {
     return;
   }
 
-  // Valida a key no banco
   const keyHash = createHash('sha256').update(api_key).digest('hex');
   const { data, error } = await supabase
     .from('user_api_keys')
@@ -206,7 +193,6 @@ oauthRouter.post('/oauth/validate', async (req, res) => {
     return;
   }
 
-  // Gera código de autorização temporário (válido 10 min)
   const code = randomBytes(32).toString('hex');
   const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -246,13 +232,11 @@ oauthRouter.post('/oauth/token', async (req, res) => {
     return;
   }
 
-  // Deleta o código usado
   await supabase.from('mcp_oauth_codes').delete().eq('code', code);
 
-  // O access_token É o hash da API Key — reutilizamos a validação existente
   res.json({
     access_token: data.api_key_hash,
     token_type: 'bearer',
-    expires_in: 31536000, // 1 ano
+    expires_in: 31536000,
   });
 });
