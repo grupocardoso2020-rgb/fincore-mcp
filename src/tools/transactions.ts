@@ -5,7 +5,6 @@ import { AuthContext, validateEntityAccess } from '../auth.js';
 
 export function registerTransactionTools(server: McpServer, getAuth: () => AuthContext) {
 
-  // Tool auxiliar — busca fornecedores
   server.tool(
     'get_suppliers',
     'Lista fornecedores de uma entidade para uso ao criar despesas',
@@ -37,7 +36,6 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
     }
   );
 
-  // Tool auxiliar — busca formas de pagamento
   server.tool(
     'get_payment_methods',
     'Lista formas de pagamento de uma entidade para uso ao criar lançamentos',
@@ -66,7 +64,6 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
     }
   );
 
-  // Tool principal — busca transações
   server.tool(
     'get_transactions',
     'Busca lançamentos financeiros de uma entidade por período',
@@ -126,7 +123,6 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
     }
   );
 
-  // Tool principal — cria transação completa
   server.tool(
     'create_transaction',
     'Cria um novo lançamento financeiro (receita ou despesa) com todos os campos disponíveis',
@@ -140,14 +136,15 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
       category_id: z.string().uuid().optional().describe('ID da categoria — use get_categories para obter'),
       bank_account_id: z.string().uuid().optional().describe('ID da conta bancária — use get_bank_accounts para obter'),
       payment_method_id: z.string().uuid().optional().describe('ID da forma de pagamento — use get_payment_methods para obter'),
-      supplier_id: z.string().uuid().optional().describe('ID do fornecedor (apenas para despesas) — use get_suppliers para obter'),
+      supplier_id: z.string().uuid().optional().describe('ID do fornecedor — use get_suppliers para obter'),
+      client_id: z.string().uuid().optional().describe('ID do cliente — use get_clients para obter'),
       due_date: z.string().optional().describe('Data de vencimento (YYYY-MM-DD) — para lançamentos pendentes'),
       notes: z.string().optional().describe('Observações adicionais'),
     },
     async ({
       entity_id, description, amount, type, date, status,
       category_id, bank_account_id, payment_method_id,
-      supplier_id, due_date, notes
+      supplier_id, client_id, due_date, notes
     }) => {
       const auth = getAuth();
       await validateEntityAccess(auth, entity_id);
@@ -158,6 +155,7 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
           entity_id,
           description,
           amount,
+          net_amount: amount, // simplificado — sem cálculo de impostos por ora
           type,
           date,
           status,
@@ -165,6 +163,7 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
           bank_account_id: bank_account_id ?? null,
           payment_method_id: payment_method_id ?? null,
           supplier_id: supplier_id ?? null,
+          client_id: client_id ?? null,
           due_date: due_date ?? null,
           notes: notes ?? null,
           recurrence_type: 'none',
@@ -182,6 +181,86 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
             message: `Lançamento "${description}" de R$ ${amount.toFixed(2)} criado com sucesso.`,
             transaction: data,
           }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'update_transaction_status',
+    'Atualiza o status de um lançamento (pago, pendente, cancelado)',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      transaction_id: z.string().uuid().describe('ID do lançamento'),
+      status: z.enum(['paid', 'pending', 'cancelled']).describe('Novo status'),
+      paid_date: z.string().optional().describe('Data de pagamento (YYYY-MM-DD) — obrigatório quando status=paid'),
+    },
+    async ({ entity_id, transaction_id, status, paid_date }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('transactions')
+        .select('id, description, amount, status')
+        .eq('id', transaction_id)
+        .eq('entity_id', entity_id)
+        .single();
+
+      if (fetchError || !existing) {
+        throw new Error('Lançamento não encontrado ou não pertence a esta entidade');
+      }
+
+      const updateData: any = { status };
+      if (status === 'paid') {
+        updateData.paid_date = paid_date ?? new Date().toISOString().split('T')[0];
+      }
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updateData)
+        .eq('id', transaction_id)
+        .eq('entity_id', entity_id);
+
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: `Lançamento "${existing.description}" atualizado para ${status}.`,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'get_clients',
+    'Lista clientes de uma entidade',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      search: z.string().optional().describe('Filtrar por nome (opcional)'),
+    },
+    async ({ entity_id, search }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      let query = supabase
+        .from('clients')
+        .select('id, name, email, phone, document')
+        .eq('entity_id', entity_id)
+        .order('name');
+
+      if (search) query = query.ilike('name', `%${search}%`);
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ clients: data ?? [] }, null, 2),
         }],
       };
     }
