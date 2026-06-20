@@ -18,6 +18,22 @@ oauthRouter.get('/.well-known/oauth-authorization-server', (_req, res) => {
   });
 });
 
+// Dynamic Client Registration — RFC 7591
+// Claude.ai registra automaticamente como cliente OAuth
+oauthRouter.post('/oauth/register', (req, res) => {
+  const { client_name, redirect_uris } = req.body;
+
+  // Aceita qualquer registro e retorna um client_id fixo
+  res.status(201).json({
+    client_id: 'claude-ai-client',
+    client_name: client_name ?? 'Claude',
+    redirect_uris: redirect_uris ?? [],
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+  });
+});
+
 // Página de autorização — usuário cola a API Key aqui
 oauthRouter.get('/oauth/authorize', (req, res) => {
   const { redirect_uri, state } = req.query;
