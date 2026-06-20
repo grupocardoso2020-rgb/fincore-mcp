@@ -79,4 +79,106 @@ export function registerCalendarTools(server: McpServer, getAuth: () => AuthCont
       };
     }
   );
+
+  // Update status de agendamento
+  server.tool(
+    'update_calendar_event_status',
+    'Atualiza o status de um agendamento (concluído, perdido, cancelado)',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      event_id: z.string().uuid().describe('ID do agendamento'),
+      status: z.enum(['pending', 'done', 'missed', 'cancelled']).describe('Novo status do agendamento'),
+    },
+    async ({ entity_id, event_id, status }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('calendar_events')
+        .select('id, title, date')
+        .eq('id', event_id)
+        .eq('entity_id', entity_id)
+        .single();
+
+      if (fetchError || !existing) {
+        throw new Error('Agendamento não encontrado ou não pertence a esta entidade');
+      }
+
+      const { error } = await supabase
+        .from('calendar_events')
+        .update({ status })
+        .eq('id', event_id)
+        .eq('entity_id', entity_id);
+
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: `Agendamento "${existing.title}" do dia ${existing.date} atualizado para ${status}.`,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  // Criar lembrete
+  server.tool(
+    'create_calendar_reminder',
+    'Cria um lembrete para um agendamento existente',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      event_id: z.string().uuid().describe('ID do agendamento'),
+      minutes_before: z.number().int().positive().default(30).describe('Minutos antes do evento para lembrar (ex: 15, 30, 60, 1440 para 1 dia antes)'),
+    },
+    async ({ entity_id, event_id, minutes_before }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('calendar_events')
+        .select('id, title, date, time')
+        .eq('id', event_id)
+        .eq('entity_id', entity_id)
+        .single();
+
+      if (fetchError || !existing) {
+        throw new Error('Agendamento não encontrado ou não pertence a esta entidade');
+      }
+
+      // Calcula remind_at baseado na data/hora do evento
+      let remind_at: string | null = null;
+      if (existing.date && existing.time) {
+        const eventDateTime = new Date(`${existing.date}T${existing.time}:00`);
+        eventDateTime.setMinutes(eventDateTime.getMinutes() - minutes_before);
+        remind_at = eventDateTime.toISOString();
+      }
+
+      const { data, error } = await supabase
+        .from('calendar_reminders')
+        .insert({
+          event_id,
+          minutes_before,
+          remind_at,
+          is_notified: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: `Lembrete criado: ${minutes_before} minutos antes de "${existing.title}" no dia ${existing.date}.`,
+            reminder: data,
+          }, null, 2),
+        }],
+      };
+    }
+  );
 }
