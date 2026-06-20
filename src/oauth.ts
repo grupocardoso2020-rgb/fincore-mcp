@@ -6,12 +6,12 @@ export const oauthRouter = Router();
 
 const APP_URL = 'https://mcp.fincore.app.br';
 
-// OAuth discovery — obrigatório para o claude.ai encontrar os endpoints
 oauthRouter.get('/.well-known/oauth-authorization-server', (_req, res) => {
   res.json({
     issuer: APP_URL,
     authorization_endpoint: `${APP_URL}/oauth/authorize`,
     token_endpoint: `${APP_URL}/oauth/token`,
+    registration_endpoint: `${APP_URL}/oauth/register`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code'],
     code_challenge_methods_supported: ['S256'],
