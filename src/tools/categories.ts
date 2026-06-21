@@ -6,7 +6,7 @@ import { AuthContext, validateEntityAccess } from '../auth.js';
 export function registerCategoryTools(server: McpServer, getAuth: () => AuthContext) {
   server.tool(
     'get_categories',
-    'Lista categorias de uma entidade',
+    'Lista categorias de uma entidade. Retorna nome, tipo, palavras-chave (keywords) e classificação financeira (financial_classification) para permitir categorização automática de lançamentos.',
     {
       entity_id: z.string().uuid().describe('ID da entidade'),
       type: z.enum(['income', 'expense']).optional().describe('Filtrar por tipo'),
@@ -17,7 +17,7 @@ export function registerCategoryTools(server: McpServer, getAuth: () => AuthCont
 
       let query = supabase
         .from('categories')
-        .select('id, name, type, color, icon')
+        .select('id, name, type, color, icon, keywords, financial_classification')
         .eq('entity_id', entity_id)
         .order('name');
 
