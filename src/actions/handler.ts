@@ -431,7 +431,7 @@ actionsRouter.get('/actions/get_categories', async (req, res) => {
     const { entity_id, type } = req.query as Record<string, string>;
     if (!entity_id) return fail(res, new Error('entity_id é obrigatório'), 400);
     await validateEntityAccess(auth, entity_id);
-   let query = supabase.from('categories').select('id, name, type, color, icon, keywords, financial_classification').eq('entity_id', entity_id).order('name');
+    let query = supabase.from('categories').select('id, name, type, color, icon, keywords, financial_classification').eq('entity_id', entity_id).order('name');
     if (type) query = query.eq('type', type);
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -506,13 +506,10 @@ actionsRouter.post('/actions/create_category', async (req, res) => {
       return fail(res, new Error('entity_id, name e type são obrigatórios'), 400);
     }
     await validateEntityAccess(auth, entity_id);
-
     const { data, error } = await supabase
       .from('categories')
       .insert({
-        entity_id,
-        name,
-        type,
+        entity_id, name, type,
         color: color ?? '#6366f1',
         icon: icon ?? 'tag',
         keywords: keywords ?? [],
@@ -520,7 +517,6 @@ actionsRouter.post('/actions/create_category', async (req, res) => {
       })
       .select()
       .single();
-
     if (error) throw new Error(error.message);
     ok(res, { message: `Categoria "${name}" criada com sucesso.`, category: data });
   } catch (err) { fail(res, err); }
@@ -535,22 +531,16 @@ actionsRouter.post('/actions/create_supplier', async (req, res) => {
       return fail(res, new Error('entity_id e name são obrigatórios'), 400);
     }
     await validateEntityAccess(auth, entity_id);
-
     const { data, error } = await supabase
       .from('suppliers')
       .insert({
-        entity_id,
-        owner_id: auth.user_id,
-        name,
-        email: email ?? null,
-        phone: phone ?? null,
-        address: address ?? null,
-        document: document ?? null,
+        entity_id, owner_id: auth.user_id, name,
+        email: email ?? null, phone: phone ?? null,
+        address: address ?? null, document: document ?? null,
         notes: notes ?? null,
       })
       .select()
       .single();
-
     if (error) throw new Error(error.message);
     ok(res, { message: `Fornecedor "${name}" cadastrado com sucesso.`, supplier: data });
   } catch (err) { fail(res, err); }
@@ -565,24 +555,95 @@ actionsRouter.post('/actions/create_client', async (req, res) => {
       return fail(res, new Error('entity_id e name são obrigatórios'), 400);
     }
     await validateEntityAccess(auth, entity_id);
-
     const { data, error } = await supabase
       .from('clients')
       .insert({
-        entity_id,
-        owner_id: auth.user_id,
-        name,
-        email: email ?? null,
-        phone: phone ?? null,
-        address: address ?? null,
-        document: document ?? null,
+        entity_id, owner_id: auth.user_id, name,
+        email: email ?? null, phone: phone ?? null,
+        address: address ?? null, document: document ?? null,
         notes: notes ?? null,
       })
       .select()
       .single();
-
     if (error) throw new Error(error.message);
     ok(res, { message: `Cliente "${name}" cadastrado com sucesso.`, client: data });
+  } catch (err) { fail(res, err); }
+});
+
+// ─── ATTACH DOCUMENT ─────────────────────────────────────────────────────────
+
+actionsRouter.post('/actions/attach_document', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, transaction_id, file_content, file_name, file_mime_type } = req.body;
+
+    if (!entity_id || !transaction_id || !file_content || !file_name || !file_mime_type) {
+      return fail(res, new Error('entity_id, transaction_id, file_content, file_name e file_mime_type são obrigatórios'), 400);
+    }
+
+    const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (!ALLOWED_MIME_TYPES.includes(file_mime_type)) {
+      return fail(res, new Error(`Tipo não suportado: ${file_mime_type}. Aceitos: ${ALLOWED_MIME_TYPES.join(', ')}`), 400);
+    }
+
+    await validateEntityAccess(auth, entity_id);
+
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = Buffer.from(file_content, 'base64');
+    } catch {
+      return fail(res, new Error('Conteúdo base64 inválido'), 400);
+    }
+
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (fileBuffer.byteLength > MAX_SIZE) {
+      const sizeMB = (fileBuffer.byteLength / 1024 / 1024).toFixed(2);
+      return fail(res, new Error(`Arquivo muito grande: ${sizeMB}MB. Máximo: 10MB`), 400);
+    }
+
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .select('id, description')
+      .eq('id', transaction_id)
+      .eq('entity_id', entity_id)
+      .single();
+
+    if (txError || !transaction) {
+      return fail(res, new Error(`Lançamento ${transaction_id} não encontrado na entidade ${entity_id}`), 404);
+    }
+
+    const ext = file_name.split('.').pop()?.toLowerCase() ?? file_mime_type.split('/')[1];
+    const storagePath = `${entity_id}/${transaction_id}/${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('transaction-attachments')
+      .upload(storagePath, fileBuffer, {
+        contentType: file_mime_type,
+        upsert: true,
+      });
+
+    if (uploadError) throw new Error(`Falha no upload: ${uploadError.message}`);
+
+    const { error: updateError } = await supabase
+      .from('transactions')
+      .update({
+        attachment_url: storagePath,
+        attachment_name: file_name,
+        attachment_type: file_mime_type,
+      })
+      .eq('id', transaction_id);
+
+    if (updateError) {
+      throw new Error(`Arquivo salvo mas falha ao vincular ao lançamento: ${updateError.message}. Path: ${storagePath}`);
+    }
+
+    ok(res, {
+      message: `Documento "${file_name}" anexado com sucesso ao lançamento "${transaction.description}".`,
+      attachment_url: storagePath,
+      attachment_name: file_name,
+      attachment_type: file_mime_type,
+    });
   } catch (err) { fail(res, err); }
 });
 
@@ -720,7 +781,7 @@ actionsRouter.post('/actions/update_calendar_event', async (req, res) => {
   const auth = await getAuth(req, res);
   if (!auth) return;
   try {
-    const { entity_id, event_id, title, description, date, time, status, color, notes, reminder_minutes } = req.body;
+    const { entity_id, event_id, title, description, date, time, status, color, notes } = req.body;
     if (!entity_id || !event_id) return fail(res, new Error('entity_id e event_id são obrigatórios'), 400);
     await validateEntityAccess(auth, entity_id);
     const { data: existing, error: fetchError } = await supabase.from('calendar_events').select('id, title, date, time').eq('id', event_id).eq('entity_id', entity_id).single();
