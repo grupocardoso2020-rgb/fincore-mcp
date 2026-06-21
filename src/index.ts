@@ -14,7 +14,7 @@ import { supabase } from './supabase.js';
 import { registerDeleteTools } from './tools/delete.js';
 import { registerRecurringTools } from './tools/recurring.js';
 import { registerUpdateTools } from './tools/update.js';
-import { attachDocumentTool, handleAttachDocument } from './tools/attachments.js';
+import { registerAttachmentTools } from './tools/attachments.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
@@ -107,16 +107,7 @@ app.post('/mcp', async (req, res) => {
   registerDeleteTools(server, getAuth);
   registerRecurringTools(server, getAuth);
   registerUpdateTools(server, getAuth);
-
-  // Registrar tool de anexo de documentos
-  server.tool(
-    attachDocumentTool.name,
-    attachDocumentTool.description,
-    attachDocumentTool.inputSchema.properties,
-    async (args: any) => {
-      return await handleAttachDocument(args, token);
-    }
-  );
+  registerAttachmentTools(server, getAuth);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
