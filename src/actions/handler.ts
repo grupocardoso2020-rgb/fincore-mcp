@@ -495,6 +495,97 @@ actionsRouter.get('/actions/get_clients', async (req, res) => {
   } catch (err) { fail(res, err); }
 });
 
+// ─── CREATE CATEGORY / SUPPLIER / CLIENT ─────────────────────────────────────
+
+actionsRouter.post('/actions/create_category', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, name, type, color, icon, keywords, financial_classification } = req.body;
+    if (!entity_id || !name || !type) {
+      return fail(res, new Error('entity_id, name e type são obrigatórios'), 400);
+    }
+    await validateEntityAccess(auth, entity_id);
+
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({
+        entity_id,
+        name,
+        type,
+        color: color ?? '#6366f1',
+        icon: icon ?? 'tag',
+        keywords: keywords ?? [],
+        financial_classification: financial_classification ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    ok(res, { message: `Categoria "${name}" criada com sucesso.`, category: data });
+  } catch (err) { fail(res, err); }
+});
+
+actionsRouter.post('/actions/create_supplier', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, name, email, phone, address, document, notes } = req.body;
+    if (!entity_id || !name) {
+      return fail(res, new Error('entity_id e name são obrigatórios'), 400);
+    }
+    await validateEntityAccess(auth, entity_id);
+
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert({
+        entity_id,
+        owner_id: auth.user_id,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+        address: address ?? null,
+        document: document ?? null,
+        notes: notes ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    ok(res, { message: `Fornecedor "${name}" cadastrado com sucesso.`, supplier: data });
+  } catch (err) { fail(res, err); }
+});
+
+actionsRouter.post('/actions/create_client', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, name, email, phone, address, document, notes } = req.body;
+    if (!entity_id || !name) {
+      return fail(res, new Error('entity_id e name são obrigatórios'), 400);
+    }
+    await validateEntityAccess(auth, entity_id);
+
+    const { data, error } = await supabase
+      .from('clients')
+      .insert({
+        entity_id,
+        owner_id: auth.user_id,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+        address: address ?? null,
+        document: document ?? null,
+        notes: notes ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    ok(res, { message: `Cliente "${name}" cadastrado com sucesso.`, client: data });
+  } catch (err) { fail(res, err); }
+});
+
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
 
 actionsRouter.get('/actions/get_summary', async (req, res) => {
