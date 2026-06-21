@@ -32,6 +32,10 @@ app.get('/health', (_req, res) => {
 // OAuth routes
 app.use(oauthRouter);
 
+// GPT Actions REST endpoints
+app.use(actionsRouter);
+app.use(openapiRouter);
+
 // MCP endpoint
 app.post('/mcp', async (req, res) => {
   let auth: AuthContext;
