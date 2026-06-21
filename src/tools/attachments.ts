@@ -3,13 +3,6 @@ import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { AuthContext, validateEntityAccess } from '../auth.js';
 
-const ALLOWED_MIME_TYPES = [
-  'application/pdf',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-] as const;
-
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 function getMimeExtension(mimeType: string): string {
@@ -114,7 +107,7 @@ export function registerAttachmentTools(server: McpServer, getAuth: () => AuthCo
 
       return {
         content: [{
-          type: 'text',
+          type: 'text' as const,
           text: JSON.stringify({
             success: true,
             attachment_url: storagePath,
