@@ -93,6 +93,87 @@ openapiRouter.get('/openapi.json', (_req, res) => {
           responses: { '200': { description: 'Lista de clientes' } },
         },
       },
+      '/actions/create_category': {
+  post: {
+    operationId: 'create_category',
+    summary: 'Cria uma nova categoria. financial_classification: cmv, csp, variable_cost, fixed_cost, investment, transfer (apenas despesas).',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['entity_id', 'name', 'type'],
+            properties: {
+              entity_id: { type: 'string' },
+              name: { type: 'string' },
+              type: { type: 'string', enum: ['income', 'expense'] },
+              color: { type: 'string', description: 'Hex ex: #6366f1' },
+              icon: { type: 'string', description: 'Nome do ícone' },
+              keywords: { type: 'array', items: { type: 'string' }, description: 'Palavras-chave para categorização automática' },
+              financial_classification: { type: 'string', enum: ['cmv', 'csp', 'variable_cost', 'fixed_cost', 'investment', 'transfer'], description: 'Apenas para despesas' },
+            },
+          },
+        },
+      },
+    },
+    responses: { '200': { description: 'Categoria criada' } },
+  },
+},
+'/actions/create_supplier': {
+  post: {
+    operationId: 'create_supplier',
+    summary: 'Cria um novo fornecedor',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['entity_id', 'name'],
+            properties: {
+              entity_id: { type: 'string' },
+              name: { type: 'string' },
+              email: { type: 'string' },
+              phone: { type: 'string' },
+              address: { type: 'string' },
+              document: { type: 'string', description: 'CPF ou CNPJ' },
+              notes: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    responses: { '200': { description: 'Fornecedor criado' } },
+  },
+},
+'/actions/create_client': {
+  post: {
+    operationId: 'create_client',
+    summary: 'Cria um novo cliente',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['entity_id', 'name'],
+            properties: {
+              entity_id: { type: 'string' },
+              name: { type: 'string' },
+              email: { type: 'string' },
+              phone: { type: 'string' },
+              address: { type: 'string' },
+              document: { type: 'string', description: 'CPF ou CNPJ' },
+              notes: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    responses: { '200': { description: 'Cliente criado' } },
+  },
+},
       '/actions/get_summary': {
         get: {
           operationId: 'get_summary',
