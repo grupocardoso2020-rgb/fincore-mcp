@@ -286,7 +286,7 @@ actionsRouter.post('/actions/update_transaction', async (req, res) => {
   }
 });
 
-actionsRouter.delete('/actions/delete_transaction', async (req, res) => {
+actionsRouter.post('/actions/delete_transaction', async (req, res) => {
   const auth = await getAuth(req, res);
   if (!auth) return;
 
@@ -817,7 +817,7 @@ actionsRouter.post('/actions/update_calendar_event_status', async (req, res) => 
   } catch (err) { fail(res, err); }
 });
 
-actionsRouter.delete('/actions/delete_calendar_event', async (req, res) => {
+actionsRouter.post('/actions/delete_calendar_event', async (req, res) => {
   const auth = await getAuth(req, res);
   if (!auth) return;
   try {
