@@ -382,7 +382,7 @@ openapiRouter.get('/openapi.json', (_req, res) => {
         },
       },
       '/actions/delete_transaction': {
-        delete: {
+  post: {
           operationId: 'delete_transaction',
           summary: 'Apaga um lançamento. Confirme com o usuário antes.',
           requestBody: {
@@ -543,7 +543,7 @@ openapiRouter.get('/openapi.json', (_req, res) => {
         },
       },
       '/actions/delete_calendar_event': {
-        delete: {
+  post: {
           operationId: 'delete_calendar_event',
           summary: 'Apaga agendamento e seus lembretes. Confirme com o usuário antes.',
           requestBody: {
