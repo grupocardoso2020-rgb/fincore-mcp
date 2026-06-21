@@ -136,7 +136,7 @@ OBRIGATÓRIO APENAS PARA RECEITA (income):
 OPCIONAIS:
 - supplier_id: fornecedor (despesas)
 - client_id: cliente (receitas)
-- due_date: data de vencimento (quando status=pending)
+- due_date: data de vencimento (quando diferente da data do lançamento)
 - notes: observações
 
 FLUXO OBRIGATÓRIO antes de criar:
@@ -156,7 +156,7 @@ FLUXO OBRIGATÓRIO antes de criar:
       payment_method_id: z.string().uuid().optional().describe('ID da forma de pagamento — OBRIGATÓRIO para receitas — use get_payment_methods'),
       supplier_id: z.string().uuid().optional().describe('ID do fornecedor (opcional, despesas) — use get_suppliers'),
       client_id: z.string().uuid().optional().describe('ID do cliente (opcional, receitas) — use get_clients'),
-      due_date: z.string().optional().describe('Data de vencimento (YYYY-MM-DD) — para lançamentos pendentes'),
+      due_date: z.string().optional().describe('Data de vencimento (YYYY-MM-DD) — se não informado usa a data do lançamento'),
       notes: z.string().optional().describe('Observações adicionais'),
     },
     async ({
@@ -167,7 +167,6 @@ FLUXO OBRIGATÓRIO antes de criar:
       const auth = getAuth();
       await validateEntityAccess(auth, entity_id);
 
-      // Validações obrigatórias
       if (!category_id) {
         throw new Error('category_id é obrigatório. Use get_categories para obter o ID correto.');
       }
@@ -193,7 +192,7 @@ FLUXO OBRIGATÓRIO antes de criar:
           payment_method_id: payment_method_id ?? null,
           supplier_id: supplier_id ?? null,
           client_id: client_id ?? null,
-          due_date: due_date ?? null,
+          due_date: due_date ?? date,
           notes: notes ?? null,
           recurrence_type: 'none',
         })
