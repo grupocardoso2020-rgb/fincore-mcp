@@ -15,6 +15,8 @@ import { registerDeleteTools } from './tools/delete.js';
 import { registerRecurringTools } from './tools/recurring.js';
 import { registerUpdateTools } from './tools/update.js';
 import { registerAttachmentTools } from './tools/attachments.js';
+import { actionsRouter } from './actions/handler.js';
+import { openapiRouter } from './actions/openapi.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
