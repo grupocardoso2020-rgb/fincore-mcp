@@ -174,6 +174,31 @@ openapiRouter.get('/openapi.json', (_req, res) => {
     responses: { '200': { description: 'Cliente criado' } },
   },
 },
+      '/actions/attach_document': {
+  post: {
+    operationId: 'attach_document',
+    summary: 'Anexa um documento (recibo, nota fiscal, comprovante) a um lançamento existente. Envie o arquivo em base64.',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['entity_id', 'transaction_id', 'file_content', 'file_name', 'file_mime_type'],
+            properties: {
+              entity_id: { type: 'string', description: 'ID da entidade dona do lançamento' },
+              transaction_id: { type: 'string', description: 'ID do lançamento ao qual o documento será anexado' },
+              file_content: { type: 'string', description: 'Conteúdo do arquivo codificado em base64' },
+              file_name: { type: 'string', description: 'Nome original do arquivo (ex: recibo.pdf)' },
+              file_mime_type: { type: 'string', enum: ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'], description: 'Tipo MIME do arquivo' },
+            },
+          },
+        },
+      },
+    },
+    responses: { '200': { description: 'Documento anexado com sucesso' } },
+  },
+},
       '/actions/get_summary': {
         get: {
           operationId: 'get_summary',
