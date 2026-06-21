@@ -293,4 +293,96 @@ FLUXO OBRIGATÓRIO antes de criar:
       };
     }
   );
+
+  server.tool(
+    'create_supplier',
+    'Cria um novo fornecedor no Fincore. Use para cadastrar fornecedores antes de vinculá-los a lançamentos de despesa.',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      name: z.string().describe('Nome do fornecedor — obrigatório'),
+      email: z.string().email().optional().describe('E-mail do fornecedor'),
+      phone: z.string().optional().describe('Telefone do fornecedor'),
+      address: z.string().optional().describe('Endereço do fornecedor'),
+      document: z.string().optional().describe('CPF ou CNPJ do fornecedor'),
+      notes: z.string().optional().describe('Observações adicionais'),
+    },
+    async ({ entity_id, name, email, phone, address, document, notes }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      const { data, error } = await supabase
+        .from('suppliers')
+        .insert({
+          entity_id,
+          owner_id: auth.user_id,
+          name,
+          email: email ?? null,
+          phone: phone ?? null,
+          address: address ?? null,
+          document: document ?? null,
+          notes: notes ?? null,
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: `Fornecedor "${name}" cadastrado com sucesso.`,
+            supplier: data,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'create_client',
+    'Cria um novo cliente no Fincore. Use para cadastrar clientes antes de vinculá-los a lançamentos de receita.',
+    {
+      entity_id: z.string().uuid().describe('ID da entidade'),
+      name: z.string().describe('Nome do cliente — obrigatório'),
+      email: z.string().email().optional().describe('E-mail do cliente'),
+      phone: z.string().optional().describe('Telefone do cliente'),
+      address: z.string().optional().describe('Endereço do cliente'),
+      document: z.string().optional().describe('CPF ou CNPJ do cliente'),
+      notes: z.string().optional().describe('Observações adicionais'),
+    },
+    async ({ entity_id, name, email, phone, address, document, notes }) => {
+      const auth = getAuth();
+      await validateEntityAccess(auth, entity_id);
+
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({
+          entity_id,
+          owner_id: auth.user_id,
+          name,
+          email: email ?? null,
+          phone: phone ?? null,
+          address: address ?? null,
+          document: document ?? null,
+          notes: notes ?? null,
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: `Cliente "${name}" cadastrado com sucesso.`,
+            client: data,
+          }, null, 2),
+        }],
+      };
+    }
+  );
 }
