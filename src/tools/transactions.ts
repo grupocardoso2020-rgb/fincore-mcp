@@ -84,7 +84,7 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
           id, description, amount, type, status,
           date, due_date, paid_date, notes,
           category_id, bank_account_id,
-          payment_method_id, supplier_id
+          payment_method_id, supplier_id, client_id
         `)
         .eq('entity_id', entity_id)
         .gte('date', date_from)
@@ -125,19 +125,37 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
 
   server.tool(
     'create_transaction',
-    'Cria um novo lançamento financeiro (receita ou despesa) com todos os campos disponíveis',
+    `Cria um novo lançamento financeiro (receita ou despesa).
+
+CAMPOS OBRIGATÓRIOS PARA TODOS:
+- entity_id, description, amount, type, date, status, category_id, bank_account_id
+
+OBRIGATÓRIO APENAS PARA RECEITA (income):
+- payment_method_id: forma de pagamento (PIX, cartão, boleto, etc.)
+
+OPCIONAIS:
+- supplier_id: fornecedor (despesas)
+- client_id: cliente (receitas)
+- due_date: data de vencimento (quando status=pending)
+- notes: observações
+
+FLUXO OBRIGATÓRIO antes de criar:
+1. Chamar get_categories para obter category_id
+2. Chamar get_bank_accounts para obter bank_account_id
+3. Para receitas: chamar get_payment_methods para obter payment_method_id
+4. Só então criar o lançamento com todos os IDs corretos`,
     {
-      entity_id: z.string().uuid().describe('ID da entidade'),
-      description: z.string().describe('Descrição do lançamento'),
-      amount: z.number().positive().describe('Valor em reais'),
-      type: z.enum(['income', 'expense']).describe('Tipo: income (receita) ou expense (despesa)'),
-      date: z.string().describe('Data do lançamento (YYYY-MM-DD)'),
-      status: z.enum(['paid', 'pending']).default('paid').describe('Status: paid (pago) ou pending (pendente)'),
-      category_id: z.string().uuid().optional().describe('ID da categoria — use get_categories para obter'),
-      bank_account_id: z.string().uuid().optional().describe('ID da conta bancária — use get_bank_accounts para obter'),
-      payment_method_id: z.string().uuid().optional().describe('ID da forma de pagamento — use get_payment_methods para obter'),
-      supplier_id: z.string().uuid().optional().describe('ID do fornecedor — use get_suppliers para obter'),
-      client_id: z.string().uuid().optional().describe('ID do cliente — use get_clients para obter'),
+      entity_id: z.string().uuid().describe('ID da entidade — obrigatório'),
+      description: z.string().describe('Descrição do lançamento — obrigatório'),
+      amount: z.number().positive().describe('Valor em reais — obrigatório'),
+      type: z.enum(['income', 'expense']).describe('Tipo: income (receita) ou expense (despesa) — obrigatório'),
+      date: z.string().describe('Data do lançamento (YYYY-MM-DD) — obrigatório'),
+      status: z.enum(['paid', 'pending']).describe('Status: paid (pago) ou pending (pendente) — obrigatório'),
+      category_id: z.string().uuid().describe('ID da categoria — OBRIGATÓRIO — use get_categories'),
+      bank_account_id: z.string().uuid().describe('ID da conta bancária — OBRIGATÓRIO — use get_bank_accounts'),
+      payment_method_id: z.string().uuid().optional().describe('ID da forma de pagamento — OBRIGATÓRIO para receitas — use get_payment_methods'),
+      supplier_id: z.string().uuid().optional().describe('ID do fornecedor (opcional, despesas) — use get_suppliers'),
+      client_id: z.string().uuid().optional().describe('ID do cliente (opcional, receitas) — use get_clients'),
       due_date: z.string().optional().describe('Data de vencimento (YYYY-MM-DD) — para lançamentos pendentes'),
       notes: z.string().optional().describe('Observações adicionais'),
     },
@@ -149,18 +167,29 @@ export function registerTransactionTools(server: McpServer, getAuth: () => AuthC
       const auth = getAuth();
       await validateEntityAccess(auth, entity_id);
 
+      // Validações obrigatórias
+      if (!category_id) {
+        throw new Error('category_id é obrigatório. Use get_categories para obter o ID correto.');
+      }
+      if (!bank_account_id) {
+        throw new Error('bank_account_id é obrigatório. Use get_bank_accounts para obter o ID correto.');
+      }
+      if (type === 'income' && !payment_method_id) {
+        throw new Error('payment_method_id é obrigatório para receitas. Use get_payment_methods para obter o ID correto.');
+      }
+
       const { data, error } = await supabase
         .from('transactions')
         .insert({
           entity_id,
           description,
           amount,
-          net_amount: amount, // simplificado — sem cálculo de impostos por ora
+          net_amount: amount,
           type,
           date,
           status,
-          category_id: category_id ?? null,
-          bank_account_id: bank_account_id ?? null,
+          category_id,
+          bank_account_id,
           payment_method_id: payment_method_id ?? null,
           supplier_id: supplier_id ?? null,
           client_id: client_id ?? null,
