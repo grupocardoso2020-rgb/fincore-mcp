@@ -431,7 +431,7 @@ actionsRouter.get('/actions/get_categories', async (req, res) => {
     const { entity_id, type } = req.query as Record<string, string>;
     if (!entity_id) return fail(res, new Error('entity_id é obrigatório'), 400);
     await validateEntityAccess(auth, entity_id);
-    let query = supabase.from('categories').select('id, name, type, color, icon').eq('entity_id', entity_id).order('name');
+   let query = supabase.from('categories').select('id, name, type, color, icon, keywords, financial_classification').eq('entity_id', entity_id).order('name');
     if (type) query = query.eq('type', type);
     const { data, error } = await query;
     if (error) throw new Error(error.message);
