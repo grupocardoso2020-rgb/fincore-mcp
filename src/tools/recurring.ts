@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { AuthContext, validateEntityAccess } from '../auth.js';
 
-// Gera array de datas baseado na frequência
 function generateDates(startDate: string, frequency: string, count: number): string[] {
   const dates: string[] = [];
   const start = new Date(startDate + 'T12:00:00Z');
@@ -24,7 +23,7 @@ export function registerRecurringTools(server: McpServer, getAuth: () => AuthCon
   server.tool(
     'create_recurring_transaction',
     `Cria um lançamento recorrente no Fincore.
-    
+
 IMPORTANTE — como a recorrência funciona:
 - Todos os lançamentos são criados imediatamente no banco
 - Indeterminado: cria 12 lançamentos (janela de 12 meses)
@@ -32,18 +31,24 @@ IMPORTANTE — como a recorrência funciona:
 - Cada lançamento tem sua própria data calculada a partir do start_date
 - O start_date DEVE incluir o dia exato (YYYY-MM-DD), ex: 2026-07-05
 - Para mensal no dia 5: start_date=2026-07-05, cria 2026-07-05, 2026-08-05, etc.
-- Todos criados com status=pending — usuário confirma pagamento mês a mês`,
+- Todos criados com status=pending — usuário confirma pagamento mês a mês
+- due_date é preenchido automaticamente igual à date de cada lançamento
+
+FLUXO OBRIGATÓRIO antes de criar:
+1. Chamar get_categories para obter category_id
+2. Chamar get_bank_accounts para obter bank_account_id
+3. Só então criar com todos os IDs corretos`,
     {
       entity_id: z.string().uuid().describe('ID da entidade'),
       description: z.string().describe('Descrição do lançamento'),
       amount: z.number().positive().describe('Valor em reais'),
       type: z.enum(['income', 'expense']).describe('Tipo: income (receita) ou expense (despesa)'),
-      start_date: z.string().describe('Data de início COMPLETA com dia (YYYY-MM-DD) ex: 2026-07-05. O dia determina o dia de vencimento mensal.'),
-      frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('Frequência: daily, weekly, monthly ou yearly'),
-      duration_type: z.enum(['indeterminate', 'fixed']).default('indeterminate').describe('indeterminate = sem fim (cria 12 meses), fixed = número fixo de parcelas'),
+      start_date: z.string().describe('Data de início COMPLETA com dia (YYYY-MM-DD) ex: 2026-07-05'),
+      frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('Frequência'),
+      duration_type: z.enum(['indeterminate', 'fixed']).default('indeterminate').describe('indeterminate = 12 meses, fixed = número exato de parcelas'),
       recurrence_count: z.number().int().positive().optional().describe('Número de parcelas — obrigatório quando duration_type=fixed'),
-      category_id: z.string().uuid().optional().describe('ID da categoria'),
-      bank_account_id: z.string().uuid().optional().describe('ID da conta bancária'),
+      category_id: z.string().uuid().describe('ID da categoria — OBRIGATÓRIO — use get_categories'),
+      bank_account_id: z.string().uuid().describe('ID da conta bancária — OBRIGATÓRIO — use get_bank_accounts'),
       payment_method_id: z.string().uuid().optional().describe('ID da forma de pagamento'),
       supplier_id: z.string().uuid().optional().describe('ID do fornecedor'),
       client_id: z.string().uuid().optional().describe('ID do cliente'),
@@ -62,10 +67,15 @@ IMPORTANTE — como a recorrência funciona:
         throw new Error('recurrence_count é obrigatório quando duration_type é fixed');
       }
 
-      // Quantos lançamentos materializar
+      if (!category_id) {
+        throw new Error('category_id é obrigatório. Use get_categories para obter o ID correto.');
+      }
+      if (!bank_account_id) {
+        throw new Error('bank_account_id é obrigatório. Use get_bank_accounts para obter o ID correto.');
+      }
+
       const totalCount = duration_type === 'fixed' ? recurrence_count! : 12;
 
-      // Calcula end_date
       let end_date: string | null = null;
       if (duration_type === 'fixed' && recurrence_count) {
         const dates = generateDates(start_date, frequency, recurrence_count);
@@ -80,7 +90,6 @@ IMPORTANTE — como a recorrência funciona:
         ? new Date(start_date + 'T12:00:00Z').getUTCDay()
         : null;
 
-      // 1. Cria a recurrence_rule
       const { data: rule, error: ruleError } = await supabase
         .from('recurrence_rules')
         .insert({
@@ -99,10 +108,8 @@ IMPORTANTE — como a recorrência funciona:
 
       if (ruleError) throw new Error(ruleError.message);
 
-      // 2. Gera todas as datas
       const allDates = generateDates(start_date, frequency, totalCount);
 
-      // 3. Monta os lançamentos para insert em batch
       const rows = allDates.map((date, index) => ({
         entity_id,
         description,
@@ -110,6 +117,7 @@ IMPORTANTE — como a recorrência funciona:
         net_amount: amount,
         type,
         date,
+        due_date: date,
         status: 'pending',
         recurrence_type: 'none',
         recurrence_rule_id: rule.id,
@@ -129,7 +137,6 @@ IMPORTANTE — como a recorrência funciona:
         .select('id, date, current_installment');
 
       if (txError) {
-        // Rollback da rule
         await supabase.from('recurrence_rules').delete().eq('id', rule.id);
         throw new Error(txError.message);
       }
