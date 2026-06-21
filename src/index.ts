@@ -13,6 +13,7 @@ import { registerImportTools } from './tools/import.js';
 import { supabase } from './supabase.js';
 import { registerDeleteTools } from './tools/delete.js';
 import { registerRecurringTools } from './tools/recurring.js';
+import { registerUpdateTools } from './tools/update.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
@@ -104,6 +105,7 @@ app.post('/mcp', async (req, res) => {
   registerImportTools(server, getAuth);
   registerDeleteTools(server, getAuth);
   registerRecurringTools(server, getAuth);
+  registerUpdateTools(server, getAuth);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
