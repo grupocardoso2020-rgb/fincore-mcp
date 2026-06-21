@@ -13,14 +13,15 @@ openapiRouter.get('/openapi.json', (_req, res) => {
     servers: [{ url: 'https://mcp.fincore.app.br' }],
     security: [{ BearerAuth: [] }],
     components: {
-      securitySchemes: {
-        BearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          description: 'API Key gerada no Fincore em Configurações → Integrações → AI',
-        },
-      },
+  schemas: {},
+  securitySchemes: {
+    BearerAuth: {
+      type: 'http',
+      scheme: 'bearer',
+      description: 'API Key gerada no Fincore em Configurações → Integrações → AI',
     },
+  },
+},
     paths: {
       '/actions/list_entities': {
         get: {
