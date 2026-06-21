@@ -4,7 +4,7 @@ export const openapiRouter = Router();
 
 openapiRouter.get('/openapi.json', (_req, res) => {
   res.json({
-    openapi: '3.0.0',
+    openapi: '3.1.0',
     info: {
       title: 'Fincore API',
       description: 'API REST do Fincore para integração via GPT Actions. Autenticação: Bearer token (API Key gerada em Configurações → Integrações → AI).',
