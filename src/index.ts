@@ -68,7 +68,9 @@ app.post('/mcp', async (req, res) => {
         .select('id, user_id, entity_ids, revoked_at')
         .eq('key_hash', token)
         .is('revoked_at', null)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       console.log('Resultado busca hash:', { found: !!data, error: error?.message });
 
