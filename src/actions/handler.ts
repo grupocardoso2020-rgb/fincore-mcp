@@ -2,10 +2,18 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { validateApiKey, validateEntityAccess, AuthContext } from '../auth.js';
 
+// Logging de diagnóstico — só instrumentação, não altera comportamento
+function log(label: string, data?: any) {
+  console.log(`[actions] ${new Date().toISOString()} ${label}`, data ?? '');
+}
+
 // Middleware de autenticação compartilhado
 async function getAuth(req: Request, res: Response): Promise<AuthContext | null> {
   const authHeader = req.headers.authorization;
+  log(`${req.method} ${req.path} — auth header presente: ${!!authHeader}`);
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    log(`${req.method} ${req.path} — FALHA: header ausente/inválido`);
     res.status(401).json({ success: false, error: 'Authorization header ausente' });
     return null;
   }
@@ -14,7 +22,9 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
 
   try {
     if (token.startsWith('fincore_')) {
-      return await validateApiKey(authHeader);
+      const auth = await validateApiKey(authHeader);
+      log(`${req.method} ${req.path} — auth OK (api key), user_id: ${auth.user_id}`);
+      return auth;
     } else {
       const { data, error } = await supabase
         .from('user_api_keys')
@@ -24,6 +34,7 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
         .single();
 
       if (error || !data) {
+        log(`${req.method} ${req.path} — FALHA: token inválido ou revogado`);
         res.status(401).json({ success: false, error: 'Token inválido ou revogado' });
         return null;
       }
@@ -34,22 +45,26 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
         .eq('id', data.id)
         .then(() => {});
 
+      log(`${req.method} ${req.path} — auth OK (oauth hash), user_id: ${data.user_id}`);
       return {
         user_id: data.user_id,
         entity_ids: data.entity_ids ?? null,
       };
     }
   } catch (err: any) {
+    log(`${req.method} ${req.path} — ERRO auth: ${err.message}`);
     res.status(401).json({ success: false, error: err.message ?? 'Unauthorized' });
     return null;
   }
 }
 
 function ok(res: Response, data: any) {
+  log(`${res.req.method} ${res.req.path} — respondendo 200 OK`);
   res.json({ success: true, data });
 }
 
 function fail(res: Response, error: any, status = 500) {
+  log(`${res.req.method} ${res.req.path} — respondendo ${status} ERRO: ${error?.message ?? error}`);
   res.status(status).json({ success: false, error: error?.message ?? String(error) });
 }
 
