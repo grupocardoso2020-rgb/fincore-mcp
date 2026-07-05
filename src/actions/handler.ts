@@ -847,3 +847,83 @@ actionsRouter.post('/actions/delete_calendar_event', async (req, res) => {
     ok(res, { message: `Agendamento "${existing.title}" apagado com sucesso.` });
   } catch (err) { fail(res, err); }
 });
+
+// ─── CASH CLOSING ─────────────────────────────────────────────────────────────
+
+actionsRouter.post('/actions/create_cash_closing', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, date, shift_label, responsible, total_sales, payments, movements, counted_cash, notes } = req.body;
+
+    if (!entity_id || !date || total_sales === undefined) {
+      return fail(res, new Error('entity_id, date e total_sales são obrigatórios'), 400);
+    }
+    if (total_sales <= 0) {
+      return fail(res, new Error('total_sales deve ser maior que zero'), 400);
+    }
+
+    await validateEntityAccess(auth, entity_id);
+
+    const validPayments = (payments ?? []).filter((p: any) => p.amount > 0);
+    const validMovements = (movements ?? []).filter((m: any) => m.amount > 0);
+
+    const sumOtherPayments = validPayments.reduce((s: number, p: any) => s + p.amount, 0);
+    const sumIn = validMovements.filter((m: any) => m.type === 'in').reduce((s: number, m: any) => s + m.amount, 0);
+    const sumOut = validMovements.filter((m: any) => m.type === 'out').reduce((s: number, m: any) => s + m.amount, 0);
+
+    const calculated_cash = (total_sales - sumOtherPayments) + sumIn - sumOut;
+    const difference = counted_cash !== undefined ? counted_cash - calculated_cash : null;
+
+    const { data: closing, error: closingError } = await supabase
+      .from('cash_closings')
+      .insert({
+        entity_id, date,
+        shift_label: shift_label ?? null,
+        responsible: responsible ?? null,
+        total_sales, calculated_cash,
+        counted_cash: counted_cash ?? null,
+        difference,
+        notes: notes ?? null,
+        status: 'draft',
+      })
+      .select()
+      .single();
+
+    if (closingError) throw new Error(closingError.message);
+
+    if (validPayments.length > 0) {
+      const { error: paymentsError } = await supabase
+        .from('cash_closing_payments')
+        .insert(validPayments.map((p: any) => ({
+          cash_closing_id: closing.id,
+          payment_method_id: p.payment_method_id,
+          amount: p.amount,
+        })));
+      if (paymentsError) {
+        await supabase.from('cash_closings').delete().eq('id', closing.id);
+        throw new Error(paymentsError.message);
+      }
+    }
+
+    if (validMovements.length > 0) {
+      const { error: movementsError } = await supabase
+        .from('cash_closing_movements')
+        .insert(validMovements.map((m: any) => ({
+          cash_closing_id: closing.id,
+          type: m.type,
+          amount: m.amount,
+          description: m.description ?? null,
+        })));
+      if (movementsError) {
+        await supabase.from('cash_closings').delete().eq('id', closing.id);
+        throw new Error(movementsError.message);
+      }
+    }
+
+    ok(res, {
+      message: `Apuração financeira de ${date}${shift_label ? ` (${shift_label})` : ''} criada como rascunho. Dinheiro calculado: R$ ${calculated_cash.toFixed(2)}.`,
+      cash_closing: { id: closing.id, date, shift_label: shift_label ?? null, responsible: responsible ?? null, total_sales, calculated_cash, counted_cash: counted_cash ?? null, difference, status: 'draft' },
+    });
+  } catch (err) { fail(res, err); }
+});
