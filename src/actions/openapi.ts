@@ -564,6 +564,56 @@ openapiRouter.get('/openapi.json', (_req, res) => {
           responses: { '200': { description: 'Agendamento apagado' } },
         },
       },
+      '/actions/create_cash_closing': {
+        post: {
+          operationId: 'create_cash_closing',
+          summary: 'Cria uma Apuração Financeira (fechamento de caixa/turno). Status inicial sempre draft — conversão para lançamentos é manual, feita pelo usuário na tela.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['entity_id', 'date', 'total_sales'],
+                  properties: {
+                    entity_id: { type: 'string' },
+                    date: { type: 'string', description: 'YYYY-MM-DD' },
+                    shift_label: { type: 'string', description: 'Turno, ex: Manhã, Noite, Caixa 1' },
+                    responsible: { type: 'string', description: 'Nome do responsável pelo turno' },
+                    total_sales: { type: 'number', description: 'Total de vendas do turno — deve ser maior que zero' },
+                    payments: {
+                      type: 'array',
+                      description: 'Formas de pagamento não-dinheiro (cartão, pix, etc). Use get_payment_methods para os IDs.',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          payment_method_id: { type: 'string' },
+                          amount: { type: 'number' },
+                        },
+                      },
+                    },
+                    movements: {
+                      type: 'array',
+                      description: "Entradas ('in') e saídas ('out') de caixa durante o turno",
+                      items: {
+                        type: 'object',
+                        properties: {
+                          type: { type: 'string', enum: ['in', 'out'] },
+                          amount: { type: 'number' },
+                          description: { type: 'string' },
+                        },
+                      },
+                    },
+                    counted_cash: { type: 'number', description: 'Dinheiro contado fisicamente ao fechar o caixa' },
+                    notes: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Apuração financeira criada como rascunho' } },
+        },
+      },
     },
   });
 });
