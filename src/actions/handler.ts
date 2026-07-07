@@ -850,6 +850,33 @@ actionsRouter.post('/actions/delete_calendar_event', async (req, res) => {
 
 // ─── CASH CLOSING ─────────────────────────────────────────────────────────────
 
+// Localiza uma apuração por entity_id + date (+ shift_label opcional).
+async function findCashClosing(entity_id: string, date: string, shift_label?: string) {
+  let query = supabase
+    .from('cash_closings')
+    .select('*')
+    .eq('entity_id', entity_id)
+    .eq('date', date);
+
+  if (shift_label) query = query.eq('shift_label', shift_label);
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const rows = data ?? [];
+  if (rows.length === 0) return { closing: null, candidates: null };
+  if (rows.length === 1 || shift_label) return { closing: rows[0], candidates: null };
+  return { closing: null, candidates: rows };
+}
+
+function isEditableClosing(closing: any, payments: any[], movements: any[]) {
+  if (closing.status === 'converted') return false;
+  if (payments.some((p) => p.transaction_id != null)) return false;
+  if (movements.some((m) => m.transaction_id != null)) return false;
+  if (closing.conversion_started_at != null) return false;
+  return true;
+}
+
 actionsRouter.post('/actions/create_cash_closing', async (req, res) => {
   const auth = await getAuth(req, res);
   if (!auth) return;
@@ -924,6 +951,161 @@ actionsRouter.post('/actions/create_cash_closing', async (req, res) => {
     ok(res, {
       message: `Apuração financeira de ${date}${shift_label ? ` (${shift_label})` : ''} criada como rascunho. Dinheiro calculado: R$ ${calculated_cash.toFixed(2)}.`,
       cash_closing: { id: closing.id, date, shift_label: shift_label ?? null, responsible: responsible ?? null, total_sales, calculated_cash, counted_cash: counted_cash ?? null, difference, status: 'draft' },
+    });
+  } catch (err) { fail(res, err); }
+});
+
+actionsRouter.get('/actions/get_cash_closings', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, date_from, date_to, limit } = req.query as Record<string, string>;
+    if (!entity_id) return fail(res, new Error('entity_id é obrigatório'), 400);
+    await validateEntityAccess(auth, entity_id);
+
+    let query = supabase
+      .from('cash_closings')
+      .select('*')
+      .eq('entity_id', entity_id)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (date_from) query = query.gte('date', date_from);
+    if (date_to) query = query.lte('date', date_to);
+    query = query.limit(limit ? parseInt(limit) : 20);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+
+    ok(res, { cash_closings: data ?? [] });
+  } catch (err) { fail(res, err); }
+});
+
+actionsRouter.get('/actions/get_cash_closing_detail', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, date, shift_label } = req.query as Record<string, string>;
+    if (!entity_id || !date) return fail(res, new Error('entity_id e date são obrigatórios'), 400);
+    await validateEntityAccess(auth, entity_id);
+
+    const { closing, candidates } = await findCashClosing(entity_id, date, shift_label);
+
+    if (candidates) {
+      return ok(res, {
+        ambiguous: true,
+        message: `Há ${candidates.length} apurações em ${date}. Informe shift_label para desambiguar.`,
+        options: candidates.map((c) => ({ shift_label: c.shift_label, responsible: c.responsible, total_sales: c.total_sales, status: c.status })),
+      });
+    }
+
+    if (!closing) {
+      return fail(res, new Error(`Nenhuma apuração encontrada em ${date}${shift_label ? ` (${shift_label})` : ''}.`), 404);
+    }
+
+    const [{ data: payments, error: paymentsError }, { data: movements, error: movementsError }] = await Promise.all([
+      supabase.from('cash_closing_payments').select('*').eq('cash_closing_id', closing.id),
+      supabase.from('cash_closing_movements').select('*').eq('cash_closing_id', closing.id),
+    ]);
+
+    if (paymentsError) throw new Error(paymentsError.message);
+    if (movementsError) throw new Error(movementsError.message);
+
+    const editable = isEditableClosing(closing, payments ?? [], movements ?? []);
+
+    ok(res, {
+      cash_closing: { ...closing, editable },
+      payments: payments ?? [],
+      movements: movements ?? [],
+    });
+  } catch (err) { fail(res, err); }
+});
+
+actionsRouter.post('/actions/update_cash_closing', async (req, res) => {
+  const auth = await getAuth(req, res);
+  if (!auth) return;
+  try {
+    const { entity_id, date, shift_label, responsible, total_sales, payments, movements, counted_cash, notes } = req.body;
+    if (!entity_id || !date) return fail(res, new Error('entity_id e date são obrigatórios'), 400);
+
+    await validateEntityAccess(auth, entity_id);
+
+    const { closing, candidates } = await findCashClosing(entity_id, date, shift_label);
+
+    if (candidates) {
+      return fail(res, new Error(`Há ${candidates.length} apurações em ${date}. Especifique shift_label: ${candidates.map((c: any) => c.shift_label).join(', ')}`), 400);
+    }
+    if (!closing) {
+      return fail(res, new Error(`Nenhuma apuração encontrada em ${date}${shift_label ? ` (${shift_label})` : ''}.`), 404);
+    }
+
+    const [{ data: existingPayments, error: pErr }, { data: existingMovements, error: mErr }] = await Promise.all([
+      supabase.from('cash_closing_payments').select('*').eq('cash_closing_id', closing.id),
+      supabase.from('cash_closing_movements').select('*').eq('cash_closing_id', closing.id),
+    ]);
+    if (pErr) throw new Error(pErr.message);
+    if (mErr) throw new Error(mErr.message);
+
+    if (!isEditableClosing(closing, existingPayments ?? [], existingMovements ?? [])) {
+      return fail(res, new Error('Esta apuração já foi convertida (total ou parcialmente) em lançamentos e não pode mais ser editada.'), 409);
+    }
+
+    const finalTotalSales = total_sales ?? closing.total_sales;
+    const finalPayments = payments ?? (existingPayments ?? []).map((p: any) => ({ payment_method_id: p.payment_method_id, amount: p.amount }));
+    const finalMovements = movements ?? (existingMovements ?? []).map((m: any) => ({ type: m.type, amount: m.amount, description: m.description }));
+    const finalCountedCash = counted_cash !== undefined ? counted_cash : closing.counted_cash;
+
+    const validPayments = finalPayments.filter((p: any) => p.amount > 0);
+    const validMovements = finalMovements.filter((m: any) => m.amount > 0);
+
+    const sumOtherPayments = validPayments.reduce((s: number, p: any) => s + p.amount, 0);
+    const sumIn = validMovements.filter((m: any) => m.type === 'in').reduce((s: number, m: any) => s + m.amount, 0);
+    const sumOut = validMovements.filter((m: any) => m.type === 'out').reduce((s: number, m: any) => s + m.amount, 0);
+
+    const calculated_cash = (finalTotalSales - sumOtherPayments) + sumIn - sumOut;
+    const difference = finalCountedCash !== null && finalCountedCash !== undefined ? finalCountedCash - calculated_cash : null;
+
+    const { error: updateError } = await supabase
+      .from('cash_closings')
+      .update({
+        responsible: responsible !== undefined ? responsible : closing.responsible,
+        total_sales: finalTotalSales,
+        calculated_cash,
+        counted_cash: finalCountedCash ?? null,
+        difference,
+        notes: notes !== undefined ? notes : closing.notes,
+        manual_adjustment: true,
+        adjusted_at: new Date().toISOString(),
+      })
+      .eq('id', closing.id);
+
+    if (updateError) throw new Error(updateError.message);
+
+    if (payments !== undefined) {
+      const { error: delErr } = await supabase.from('cash_closing_payments').delete().eq('cash_closing_id', closing.id);
+      if (delErr) throw new Error(delErr.message);
+      if (validPayments.length > 0) {
+        const { error: insErr } = await supabase.from('cash_closing_payments').insert(
+          validPayments.map((p: any) => ({ cash_closing_id: closing.id, payment_method_id: p.payment_method_id, amount: p.amount }))
+        );
+        if (insErr) throw new Error(insErr.message);
+      }
+    }
+
+    if (movements !== undefined) {
+      const { error: delErr } = await supabase.from('cash_closing_movements').delete().eq('cash_closing_id', closing.id);
+      if (delErr) throw new Error(delErr.message);
+      if (validMovements.length > 0) {
+        const { error: insErr } = await supabase.from('cash_closing_movements').insert(
+          validMovements.map((m: any) => ({ cash_closing_id: closing.id, type: m.type, amount: m.amount, description: m.description ?? null }))
+        );
+        if (insErr) throw new Error(insErr.message);
+      }
+    }
+
+    ok(res, {
+      message: `Apuração de ${date}${shift_label ? ` (${shift_label})` : ''} atualizada. Dinheiro calculado: R$ ${calculated_cash.toFixed(2)}.`,
+      cash_closing: { id: closing.id, date, shift_label: closing.shift_label, total_sales: finalTotalSales, calculated_cash, counted_cash: finalCountedCash ?? null, difference },
     });
   } catch (err) { fail(res, err); }
 });
