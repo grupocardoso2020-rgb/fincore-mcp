@@ -614,6 +614,84 @@ openapiRouter.get('/openapi.json', (_req, res) => {
           responses: { '200': { description: 'Apuração financeira criada como rascunho' } },
         },
       },
+      '/actions/get_cash_closings': {
+        get: {
+          operationId: 'get_cash_closings',
+          summary: 'Lista Apurações Financeiras de uma entidade, ordenadas da mais recente para a mais antiga. Use para "qual foi a última apuração?" (primeiro item retornado) ou filtrando por período.',
+          parameters: [
+            { name: 'entity_id', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'date_from', in: 'query', required: false, schema: { type: 'string' }, description: 'Data inicial YYYY-MM-DD' },
+            { name: 'date_to', in: 'query', required: false, schema: { type: 'string' }, description: 'Data final YYYY-MM-DD' },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer' }, description: 'Máximo de resultados (padrão: 20)' },
+          ],
+          responses: { '200': { description: 'Lista de apurações financeiras' } },
+        },
+      },
+      '/actions/get_cash_closing_detail': {
+        get: {
+          operationId: 'get_cash_closing_detail',
+          summary: 'Busca o detalhe completo de uma Apuração Financeira específica (formas de pagamento e movimentos). Localiza por entity_id + date; use shift_label para desambiguar se houver mais de um turno na mesma data.',
+          parameters: [
+            { name: 'entity_id', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'date', in: 'query', required: true, schema: { type: 'string' }, description: 'YYYY-MM-DD' },
+            { name: 'shift_label', in: 'query', required: false, schema: { type: 'string' }, description: 'Obrigatório apenas se houver mais de uma apuração na mesma data' },
+          ],
+          responses: { '200': { description: 'Detalhe da apuração, com payments[] e movements[]' } },
+        },
+      },
+      '/actions/update_cash_closing': {
+        post: {
+          operationId: 'update_cash_closing',
+          summary: 'Edita uma Apuração Financeira existente. Bloqueado se já convertida (total ou parcialmente) em lançamentos. Localiza por entity_id + date (+ shift_label se ambíguo). Campos não informados mantêm o valor atual; payments/movements, se enviados, substituem a lista existente.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['entity_id', 'date'],
+                  properties: {
+                    entity_id: { type: 'string' },
+                    date: { type: 'string', description: 'YYYY-MM-DD — data da apuração a editar' },
+                    shift_label: { type: 'string', description: 'Obrigatório apenas se houver mais de uma apuração na mesma data' },
+                    responsible: { type: 'string' },
+                    total_sales: { type: 'number' },
+                    payments: {
+                      type: 'array',
+                      description: 'Lista completa de formas de pagamento não-dinheiro — substitui a lista existente se enviada',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          payment_method_id: { type: 'string' },
+                          amount: { type: 'number' },
+                        },
+                      },
+                    },
+                    movements: {
+                      type: 'array',
+                      description: 'Lista completa de entradas/saídas — substitui a lista existente se enviada',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          type: { type: 'string', enum: ['in', 'out'] },
+                          amount: { type: 'number' },
+                          description: { type: 'string' },
+                        },
+                      },
+                    },
+                    counted_cash: { type: 'number' },
+                    notes: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: 'Apuração atualizada' },
+            '409': { description: 'Bloqueado — apuração já convertida (total ou parcialmente)' },
+          },
+        },
+      },
     },
   });
 });
