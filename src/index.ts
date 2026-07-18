@@ -18,6 +18,7 @@ import { registerAttachmentTools } from './tools/attachments.js';
 import { registerCashClosingTools } from './tools/cash_closing.js';
 import { actionsRouter } from './actions/handler.js';
 import { openapiRouter } from './actions/openapi.js';
+import { logMcpRequest, getClientIp } from './logger.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
@@ -25,9 +26,22 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'fincore-mcp', version: '1.0.0' });
+// Health check com verificação real do Supabase
+app.get('/health', async (_req, res) => {
+  let dbStatus = 'ok';
+  try {
+    const { error } = await supabase.from('system_admins').select('user_id').limit(1);
+    if (error) dbStatus = 'error';
+  } catch {
+    dbStatus = 'error';
+  }
+  res.json({
+    status: dbStatus === 'ok' ? 'ok' : 'degraded',
+    service: 'fincore-mcp',
+    version: '1.0.0',
+    supabase: dbStatus,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // OAuth routes
@@ -40,6 +54,12 @@ app.use(openapiRouter);
 // MCP endpoint
 app.post('/mcp', async (req, res) => {
   let auth: AuthContext;
+  const startTime = Date.now();
+  const clientIp = getClientIp(req);
+
+  // Extrair tool_name do body JSON-RPC (se for tools/call)
+  const mcpMethod = req.body?.method ?? null;
+  const toolName = mcpMethod === 'tools/call' ? req.body?.params?.name ?? null : null;
 
   const authHeader = req.headers.authorization;
 
@@ -133,8 +153,27 @@ app.post('/mcp', async (req, res) => {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
     console.log('MCP request processado com sucesso');
+    logMcpRequest({
+      user_id: auth.user_id,
+      platform: 'claude',
+      endpoint: '/mcp',
+      tool_name: toolName ?? mcpMethod ?? undefined,
+      status: 'success',
+      response_time_ms: Date.now() - startTime,
+      ip_address: clientIp,
+    });
   } catch (err: any) {
     console.log('ERRO MCP:', err.message);
+    logMcpRequest({
+      user_id: auth.user_id,
+      platform: 'claude',
+      endpoint: '/mcp',
+      tool_name: toolName ?? mcpMethod ?? undefined,
+      status: 'error',
+      error_message: err.message ?? 'Internal server error',
+      response_time_ms: Date.now() - startTime,
+      ip_address: clientIp,
+    });
     if (!res.headersSent) {
       res.status(500).json({ error: err.message ?? 'Internal server error' });
     }
