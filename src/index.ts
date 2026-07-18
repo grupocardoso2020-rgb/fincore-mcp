@@ -28,6 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check com verificação real do Supabase
 app.get('/health', async (_req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://app.fincore.app.br');
   let dbStatus = 'ok';
   try {
     const { error } = await supabase.from('system_admins').select('user_id').limit(1);
