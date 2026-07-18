@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { validateApiKey, validateEntityAccess, AuthContext } from '../auth.js';
+import { logMcpRequest, getClientIp } from '../logger.js';
 
 // Logging de diagnóstico — só instrumentação, não altera comportamento
 function log(label: string, data?: any) {
@@ -9,6 +10,7 @@ function log(label: string, data?: any) {
 
 // Middleware de autenticação compartilhado
 async function getAuth(req: Request, res: Response): Promise<AuthContext | null> {
+  (req as any).__mcpStartTime = Date.now();
   const authHeader = req.headers.authorization;
   log(`${req.method} ${req.path} — auth header presente: ${!!authHeader}`);
 
@@ -24,6 +26,7 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
     if (token.startsWith('fincore_')) {
       const auth = await validateApiKey(authHeader);
       log(`${req.method} ${req.path} — auth OK (api key), user_id: ${auth.user_id}`);
+      (req as any).__mcpAuth = auth;
       return auth;
     } else {
       const { data, error } = await supabase
@@ -46,10 +49,12 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
         .then(() => {});
 
       log(`${req.method} ${req.path} — auth OK (oauth hash), user_id: ${data.user_id}`);
-      return {
+      const authResult = {
         user_id: data.user_id,
         entity_ids: data.entity_ids ?? null,
       };
+      (req as any).__mcpAuth = authResult;
+      return authResult;
     }
   } catch (err: any) {
     log(`${req.method} ${req.path} — ERRO auth: ${err.message}`);
@@ -60,11 +65,38 @@ async function getAuth(req: Request, res: Response): Promise<AuthContext | null>
 
 function ok(res: Response, data: any) {
   log(`${res.req.method} ${res.req.path} — respondendo 200 OK`);
+  const auth = (res.req as any).__mcpAuth as AuthContext | undefined;
+  const startTime = (res.req as any).__mcpStartTime as number | undefined;
+  if (auth) {
+    logMcpRequest({
+      user_id: auth.user_id,
+      platform: 'chatgpt',
+      endpoint: res.req.path,
+      tool_name: res.req.path.replace('/actions/', ''),
+      status: 'success',
+      response_time_ms: startTime ? Date.now() - startTime : undefined,
+      ip_address: getClientIp(res.req),
+    });
+  }
   res.json({ success: true, data });
 }
 
 function fail(res: Response, error: any, status = 500) {
   log(`${res.req.method} ${res.req.path} — respondendo ${status} ERRO: ${error?.message ?? error}`);
+  const auth = (res.req as any).__mcpAuth as AuthContext | undefined;
+  const startTime = (res.req as any).__mcpStartTime as number | undefined;
+  if (auth) {
+    logMcpRequest({
+      user_id: auth.user_id,
+      platform: 'chatgpt',
+      endpoint: res.req.path,
+      tool_name: res.req.path.replace('/actions/', ''),
+      status: 'error',
+      error_message: error?.message ?? String(error),
+      response_time_ms: startTime ? Date.now() - startTime : undefined,
+      ip_address: getClientIp(res.req),
+    });
+  }
   res.status(status).json({ success: false, error: error?.message ?? String(error) });
 }
 
