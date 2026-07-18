@@ -16,15 +16,16 @@ interface McpLogEntry {
  * Fire-and-forget — nunca bloqueia a resposta ao cliente.
  */
 export function logMcpRequest(entry: McpLogEntry): void {
-  supabase
-    .from('mcp_request_logs')
-    .insert(entry)
-    .then(({ error }) => {
-      if (error) console.error('[logger] Falha ao gravar log:', error.message);
-    })
-    .catch((err) => {
-      console.error('[logger] Exceção ao gravar log:', err);
-    });
+  try {
+    supabase
+      .from('mcp_request_logs')
+      .insert(entry)
+      .then(({ error }) => {
+        if (error) console.error('[logger] Falha ao gravar log:', error.message);
+      });
+  } catch (err: unknown) {
+    console.error('[logger] Exceção ao gravar log:', err);
+  }
 }
 
 /**
