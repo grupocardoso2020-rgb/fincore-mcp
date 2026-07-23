@@ -128,7 +128,7 @@ export async function finnotasRequest<T = any>(
     ...(body && method !== 'GET' ? { body: JSON.stringify(body) } : {}),
   });
 
-  const responseBody = await res.json().catch(() => null);
+  const responseBody: any = await res.json().catch(() => null);
 
   if (!res.ok) {
     const errorMsg = responseBody?.error
