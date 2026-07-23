@@ -145,7 +145,8 @@ export async function searchFinnotasClients(
     `/v1-clients?company_id=${companyId}`
   );
 
-  const raw = data?.clients ?? data?.items ?? data?.data ?? (Array.isArray(data) ? data : []);
+  const found = data?.clients ?? data?.items ?? data?.data ?? data;
+  const raw = Array.isArray(found) ? found : (found?.items ?? []);
   const clients: FinnotasClient[] = raw.map((c: any) => ({
     id: c.id,
     name: c.name ?? c.nome ?? '',
@@ -167,7 +168,8 @@ export async function searchFinnotasServices(
     `/v1-services?company_id=${companyId}`
   );
 
-  const raw = data?.services ?? data?.items ?? data?.data ?? (Array.isArray(data) ? data : []);
+  const found = data?.services ?? data?.items ?? data?.data ?? data;
+  const raw = Array.isArray(found) ? found : (found?.items ?? []);
   const services: FinnotasService[] = raw.map((s: any) => ({
     id: s.id,
     name: s.name ?? s.nome ?? s.descricao ?? '',
@@ -193,7 +195,8 @@ export async function searchFinnotasProducts(
     `/v1-products?company_id=${companyId}`
   );
 
-  const raw = data?.products ?? data?.items ?? data?.data ?? (Array.isArray(data) ? data : []);
+  const found = data?.products ?? data?.items ?? data?.data ?? data;
+  const raw = Array.isArray(found) ? found : (found?.items ?? []);
   const products: FinnotasProduct[] = raw.map((p: any) => ({
     id: p.id,
     name: p.name ?? p.nome ?? p.descricao ?? '',
