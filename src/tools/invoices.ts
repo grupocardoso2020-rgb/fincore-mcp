@@ -305,11 +305,16 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
         valorUnitario: number;
         valorTotal: number;
         descricao: string;
+        ncm: string;
+        cfop: string;
+        cst: string;
+        unidade: string;
       }> = [];
 
       for (const item of items) {
         let productId = item.product_id;
         let productName = item.product_name ?? 'Produto';
+        let productNcm: string | undefined = undefined;
         if (!productId) {
           if (!item.product_name) {
             throw new Error('Cada item precisa de product_id ou product_name.');
@@ -321,6 +326,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
           }
           productId = resolved.id;
           productName = resolved.name;
+          productNcm = resolved.ncm;
         }
         resolvedItems.push({
           product_id: productId,
@@ -328,6 +334,10 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
           valorUnitario: item.unit_price,
           valorTotal: item.quantity * item.unit_price,
           descricao: productName,
+          ncm: productNcm ?? '00000000',
+          cfop: '5102',
+          cst: '102',
+          unidade: 'UN',
         });
       }
 
