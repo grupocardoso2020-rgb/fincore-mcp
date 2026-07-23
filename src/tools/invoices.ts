@@ -24,7 +24,7 @@ function formatMatchResult<T extends { id: string; name: string }>(
 
   if (result.suggestions.length > 0) {
     const list = result.suggestions
-      .map((s, i) => `  ${i + 1}. ${s.name} (id: ${s.id})`)
+      .map((s: { id: string; name: string }, i: number) => `  ${i + 1}. ${s.name} (id: ${s.id})`)
       .join('\n');
     return {
       resolved: null,
@@ -36,7 +36,7 @@ function formatMatchResult<T extends { id: string; name: string }>(
 
   if (result.all.length > 0) {
     const list = result.all
-      .map((s, i) => `  ${i + 1}. ${s.name} (id: ${s.id})`)
+      .map((s: { id: string; name: string }, i: number) => `  ${i + 1}. ${s.name} (id: ${s.id})`)
       .join('\n');
     return {
       resolved: null,
@@ -253,7 +253,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
           type: 'text',
           text: JSON.stringify({
             success: true,
-            message: `NFS-e emitida com sucesso!`,
+            message: 'NFS-e emitida com sucesso!',
             invoice: result,
           }, null, 2),
         }],
@@ -299,10 +299,17 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
       }
 
       // ── Resolver produtos dos items ──
-      const resolvedItems: Array<{ product_id: string; quantidade: number; valor_unitario: number }> = [];
+      const resolvedItems: Array<{
+        product_id: string;
+        quantidade: number;
+        valorUnitario: number;
+        valorTotal: number;
+        descricao: string;
+      }> = [];
 
       for (const item of items) {
         let productId = item.product_id;
+        let productName = item.product_name ?? 'Produto';
         if (!productId) {
           if (!item.product_name) {
             throw new Error('Cada item precisa de product_id ou product_name.');
@@ -313,11 +320,14 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
             return { content: [{ type: 'text', text: message }] };
           }
           productId = resolved.id;
+          productName = resolved.name;
         }
         resolvedItems.push({
           product_id: productId,
           quantidade: item.quantity,
-          valor_unitario: item.unit_price,
+          valorUnitario: item.unit_price,
+          valorTotal: item.quantity * item.unit_price,
+          descricao: productName,
         });
       }
 
@@ -330,7 +340,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
         boleto: '15',
       };
 
-      const totalValue = resolvedItems.reduce((sum, i) => sum + i.quantidade * i.valor_unitario, 0);
+      const totalValue = resolvedItems.reduce((sum, i) => sum + i.valorTotal, 0);
 
       // ── Montar payload NF-e ──
       const payload: Record<string, any> = {
@@ -340,7 +350,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
         natureza_operacao: natureza_operacao ?? 'Venda de mercadoria',
         items: resolvedItems,
         pagamentos: [{
-          tipo: paymentTypeMap[payment_method] ?? '99',
+          tipoPagamento: paymentTypeMap[payment_method] ?? '99',
           valor: totalValue,
         }],
       };
@@ -353,7 +363,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
           type: 'text',
           text: JSON.stringify({
             success: true,
-            message: `NF-e emitida com sucesso!`,
+            message: 'NF-e emitida com sucesso!',
             invoice: result,
           }, null, 2),
         }],
