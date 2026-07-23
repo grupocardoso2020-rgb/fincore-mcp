@@ -116,7 +116,9 @@ export async function finnotasRequest<T = any>(
   const responseBody: any = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const errorMsg = responseBody?.error ?? responseBody?.message ?? `HTTP ${res.status}`;
+    const errorMsg = typeof responseBody?.error === 'string'
+      ? responseBody.error
+      : responseBody?.message ?? JSON.stringify(responseBody) ?? `HTTP ${res.status}`;
     console.error(`[finnotas] Erro: ${errorMsg}`, responseBody);
     throw new Error(`FinNotas: ${errorMsg}`);
   }
