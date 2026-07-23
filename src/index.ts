@@ -16,6 +16,7 @@ import { registerRecurringTools } from './tools/recurring.js';
 import { registerUpdateTools } from './tools/update.js';
 import { registerAttachmentTools } from './tools/attachments.js';
 import { registerCashClosingTools } from './tools/cash_closing.js';
+import { registerInvoiceTools } from './tools/invoices.js';
 import { actionsRouter } from './actions/handler.js';
 import { openapiRouter } from './actions/openapi.js';
 import { logMcpRequest, getClientIp } from './logger.js';
@@ -139,6 +140,7 @@ app.post('/mcp', async (req, res) => {
   registerUpdateTools(server, getAuth);
   registerAttachmentTools(server, getAuth);
   registerCashClosingTools(server, getAuth);
+  registerInvoiceTools(server, getAuth);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
