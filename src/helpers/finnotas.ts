@@ -21,6 +21,7 @@ export interface FinnotasService {
   name: string;
   codigo?: string;
   aliquota_iss?: number;
+  descricao_fiscal?: string;
 }
 
 export interface FinnotasProduct {
@@ -173,11 +174,12 @@ export async function searchFinnotasServices(
   const found = data?.services ?? data?.items ?? data?.data ?? data;
   const raw = Array.isArray(found) ? found : (found?.items ?? []);
   const services: FinnotasService[] = raw.map((s: any) => ({
-    id: s.id,
-    name: s.name ?? s.nome ?? s.descricao ?? '',
-    codigo: s.codigo ?? s.code ?? s.codigo_lc116 ?? undefined,
-    aliquota_iss: s.aliquota_iss ?? s.aliquotaIss ?? undefined,
-  }));
+  id: s.id,
+  name: s.name ?? s.nome ?? s.descricao ?? '',
+  codigo: s.codigo ?? s.code ?? s.codigo_lc116 ?? undefined,
+  aliquota_iss: s.aliquota_iss ?? s.aliquotaIss ?? undefined,
+  descricao_fiscal: s.descricao_fiscal ?? undefined,
+}));
 
   if (!searchTerm) {
     return { exact_match: null, suggestions: [], all: services };
