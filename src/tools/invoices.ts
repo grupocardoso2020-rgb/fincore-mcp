@@ -217,7 +217,13 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
       // ── Resolver serviço ──
       let resolvedService: { id: string; codigo?: string; aliquota_iss?: number } | null = null;
       if (service_id) {
-        resolvedService = { id: service_id };
+        // Buscar dados completos do serviço (codigo, aliquota_iss) — só o ID não basta
+        const allServices = await searchFinnotasServices(config.apiKey, config.companyId);
+        const found = allServices.all.find(s => s.id === service_id);
+        if (!found) {
+          throw new Error(`Serviço com ID "${service_id}" não encontrado no FinNotas.`);
+        }
+        resolvedService = found;
       } else if (service_name) {
         const serviceResult = await searchFinnotasServices(config.apiKey, config.companyId, service_name);
         const { resolved, message } = formatMatchResult(serviceResult, 'serviço', service_name);
