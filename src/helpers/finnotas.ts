@@ -175,7 +175,7 @@ export async function searchFinnotasServices(
   const services: FinnotasService[] = raw.map((s: any) => ({
     id: s.id,
     name: s.name ?? s.nome ?? s.descricao ?? '',
-    codigo: s.codigo ?? s.code ?? undefined,
+    codigo: s.codigo ?? s.code ?? s.codigo_lc116 ?? undefined,
     aliquota_iss: s.aliquota_iss ?? s.aliquotaIss ?? undefined,
   }));
 
