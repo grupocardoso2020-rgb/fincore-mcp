@@ -241,10 +241,10 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
         tipo: 'nfse',
         client_id: resolvedClientId,
         servico: {
-          descricao: description,
-          ...(resolvedService.codigo && { codigo: resolvedService.codigo }),
-          ...(resolvedService.aliquota_iss && { aliquotaIss: resolvedService.aliquota_iss }),
-        },
+  descricao: resolvedService.descricao_fiscal || description,
+     (resolvedService.codigo && { codigo: resolvedService.codigo }),
+     (resolvedService.aliquota_iss && { aliquotaIss: resolvedService.aliquota_iss }),
+},
         valores: {
           total: value,
           issRetido: iss_retido ?? false,
