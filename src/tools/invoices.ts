@@ -215,7 +215,7 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
       }
 
       // ── Resolver serviço ──
-      let resolvedService: { id: string; codigo?: string; aliquota_iss?: number } | null = null;
+      let resolvedService: { id: string; codigo?: string; aliquota_iss?: number; descricao_fiscal?: string } | null = null;
       if (service_id) {
         // Buscar dados completos do serviço (codigo, aliquota_iss) — só o ID não basta
         const allServices = await searchFinnotasServices(config.apiKey, config.companyId);
@@ -241,11 +241,10 @@ export function registerInvoiceTools(server: McpServer, getAuth: () => AuthConte
         tipo: 'nfse',
         client_id: resolvedClientId,
         servico: {
-  servico: {
-  descricao: resolvedService.descricao_fiscal || description,
-  ...(resolvedService.codigo && { codigo: resolvedService.codigo }),
-  ...(resolvedService.aliquota_iss && { aliquotaIss: resolvedService.aliquota_iss }),
-},
+          descricao: resolvedService.descricao_fiscal || description,
+          ...(resolvedService.codigo && { codigo: resolvedService.codigo }),
+          ...(resolvedService.aliquota_iss && { aliquotaIss: resolvedService.aliquota_iss }),
+        },
         valores: {
           total: value,
           issRetido: iss_retido ?? false,
